@@ -96,5 +96,11 @@ Using the estimated weight matrix $\hat{\mathbf{W}}$, we transform the centroid 
 2.  **Unified Framework:** Provides a rigorous statistical model for jointly analyzing structured demographics and unstructured text data.
 3.  **Explainability:** Bridges the gap between "Black-box" neural embeddings and "White-box" statistical inference via the proposed de-embedding strategies.
 
-## 📂 Project Structure (Tentative)
+## 📚 References
+* **Primary Reference:** Shi, J., Wang, F., Gao, Y., Song, X., & Wang, H. (2024). *Mixture conditional regression for estimating extralegal factor effects*. The Annals of Applied Statistics, 18(3), 2535-2550.
+* **Mixture Models:** Scrucca, L., Fop, M., Murphy, T. B., & Raftery, A. E. (2016). *mclust 5: clustering, classification and density estimation using Gaussian finite mixture models*. The R Journal, 8(1), 289.
+* **Embeddings:** Reimers, N., & Gurevych, I. (2019). *Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks*.
 
+---
+*Author: Hyunsoo Shin*
+*Affiliation: Department of Statistics, Sungkyunkwan University*
