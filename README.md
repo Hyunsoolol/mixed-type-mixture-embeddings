@@ -112,4 +112,5 @@ Using the estimated weight matrix $\hat{\mathbf{W}}$, we transform the centroid 
 
 ---
 *Author: Hyunsoo Shin*
+
 *Affiliation: Department of Statistics, Sungkyunkwan University*
