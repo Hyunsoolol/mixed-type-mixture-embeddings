@@ -42,3 +42,59 @@ graph LR
     F --> G[Latent Class Identification];
     G --> H["Interpretation via De-embedding"];
 ```
+
+### 1. Feature Representation
+Let the observed data for subject $i$ be $(\mathbf{x}^{(c)}_i, \mathbf{z}_i)$, where $\mathbf{x}^{(c)}_i$ is the categorical vector (e.g., demographic factors) and $\mathbf{z}_i$ is the raw text data.
+
+* **Text Embedding:** We first transform the raw text into a dense vector using a pre-trained LLM.
+    $$
+    \mathbf{v}_i = \text{LLM}(\mathbf{z}_i) \in \mathbb{R}^{D}
+    $$
+    *(where $D$ is the original embedding dimension, e.g., 768 or 1536)*
+
+* **Dimensionality Reduction:** To ensure stable covariance estimation in the Gaussian Mixture Model (as $D \gg n$ often leads to singularity issues), we project $\mathbf{v}_i$ to a lower-dimensional manifold $\mathbb{R}^{d}$ (e.g., $d \approx 20 \sim 50$):
+    $$
+    \mathbf{x}^{(e)}_i = \phi(\mathbf{v}_i) \in \mathbb{R}^d
+    $$
+    Here, $\phi$ denotes a dimensionality reduction function such as **Principal Component Analysis (PCA)**, which preserves the global variance structure suitable for GMM.
+
+### 2. Joint Mixture Model Specification
+We assume the population consists of $K$ latent classes. The joint likelihood for the mixed-type data $(\mathbf{x}^{(c)}_i, \mathbf{x}^{(e)}_i)$ is defined as:
+
+$$
+\mathcal{L}(\Theta) = \sum_{i=1}^{n} \log \left( \sum_{k=1}^{K} \pi_k \cdot f_{\text{cat}}(\mathbf{x}^{(c)}_i | \boldsymbol{\alpha}_k) \cdot f_{\text{cont}}(\mathbf{x}^{(e)}_i | \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) \right)
+$$
+
+Where:
+* **Mixing Proportion:** $\pi_k$ represents the prior probability of class $k$, satisfying $\sum_{k=1}^K \pi_k = 1$.
+* **Categorical Part:** $f_{\text{cat}}$ follows a **Multinomial distribution** parameterized by $\boldsymbol{\alpha}_k$, capturing the distribution of demographic variables within each class.
+* **Continuous (Embedding) Part:** $f_{\text{cont}}$ follows a **Multivariate Gaussian distribution**, capturing the semantic clusters of the text:
+    $$
+    f_{\text{cont}}(\mathbf{x}^{(e)}_i | \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) = (2\pi)^{-d/2}|\boldsymbol{\Sigma}_k|^{-1/2} \exp\left(-\frac{1}{2}(\mathbf{x}^{(e)}_i - \boldsymbol{\mu}_k)^T \boldsymbol{\Sigma}_k^{-1} (\mathbf{x}^{(e)}_i - \boldsymbol{\mu}_k)\right)
+    $$
+
+### 3. Interpretation Strategy (De-embedding)
+A major challenge with embeddings is their lack of interpretability. Since the cluster centroid $\boldsymbol{\mu}_k$ lies in a reduced embedding space, it is "black-box" to human readers. We propose two **"De-embedding"** methods to recover the semantic meaning of each latent class $k$.
+
+#### Method A: Semantic Anchor (Retrieval-based)
+We identify **Prototype Documents** from the original dataset that are geometrically closest to the estimated cluster centroid $\boldsymbol{\mu}_k$.
+$$
+\text{Prototype}_k = \{ \mathbf{z}_j \mid \mathbf{z}_j \in \text{Dataset}, \text{argmax}_{j} \text{CosineSim}(\mathbf{x}^{(e)}_j, \boldsymbol{\mu}_k) \}
+$$
+* **Usage:** This allows researchers to qualitatively understand the cluster by reading the actual representative texts (e.g., "This cluster represents 'Voice Phishing' cases").
+
+#### Method B: Linear Decoder (Keyword Extraction)
+We train a global linear decoder (or Lasso regression) to map the reduced embeddings back to the interpretable Bag-of-Words (BoW) space.
+$$
+\hat{\mathbf{W}} = \underset{\mathbf{W}}{\text{argmin}} \sum_{i=1}^n || \mathbf{y}_{\text{BoW}, i} - \mathbf{x}^{(e)}_i \mathbf{W} ||_2^2 + \lambda ||\mathbf{W}||_1
+$$
+Using the estimated weight matrix $\hat{\mathbf{W}}$, we transform the centroid $\boldsymbol{\mu}_k$ into a keyword importance vector $\mathbf{w}_k = \boldsymbol{\mu}_k \hat{\mathbf{W}}$, extracting the top-weighted words for each class.
+* **Usage:** This provides a quantitative description (e.g., "Top keywords: *Fraud, Bank, Transfer*").
+
+## 🚀 Key Contributions
+1.  **Semantic-Aware Clustering:** Overcomes the limitations of Naive Bayes and binary text representations by utilizing context-rich LLM embeddings.
+2.  **Unified Framework:** Provides a rigorous statistical model for jointly analyzing structured demographics and unstructured text data.
+3.  **Explainability:** Bridges the gap between "Black-box" neural embeddings and "White-box" statistical inference via the proposed de-embedding strategies.
+
+## 📂 Project Structure (Tentative)
+
