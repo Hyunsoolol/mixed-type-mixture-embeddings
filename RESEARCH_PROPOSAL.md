@@ -55,6 +55,7 @@ graph LR
   F --> G[잠재 클래스 posterior / 할당];
   G --> H[디베딩: 프로토타입+키워드+라벨링];
 ```
+
 ### 1. Feature Representation
 관측된 대상 $i$의 데이터를 $(\mathbf{x}^{(c)}_i, \mathbf{z}_i)$라고 합시다. 여기서 $\mathbf{x}^{(c)}_i$는 범주형 벡터(예: 인구통계 변수), $\mathbf{z}_i$는 원본 텍스트 데이터입니다.
 
