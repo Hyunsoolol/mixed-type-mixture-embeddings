@@ -200,7 +200,7 @@ $$
 - 범주형 변수의 조건부 분포
   - $P(\text{Country} \mid C = k)$
   - $P(\text{Channel} \mid C = k)$
-  - $P(\text{Creative\_Type} \mid C = k)$
+  - $P(\text{Creative Type} \mid C = k)$
 - 연속형 변수의 조건부 분포  
   (텍스트에서 축약된 PC + 성과 지표)
 
