@@ -85,9 +85,6 @@ $$\mathcal{L}(\Theta) = \sum_{i=1}^{n} \log \left( \sum_{k=1}^{K} \pi_k \cdot f_
     
 
 $$f_{\text{cont}}(\mathbf{x}^{(e)}_i | \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) = (2\pi)^{-d/2}|\boldsymbol{\Sigma}_k|^{-1/2} \exp\left(-\frac{1}{2}(\mathbf{x}^{(e)}_i - \boldsymbol{\mu}_k)^T \boldsymbol{\Sigma}_k^{-1} (\mathbf{x}^{(e)}_i - \boldsymbol{\mu}_k)\right)$$
-$$
-f_{\text{cont}}(\mathbf{x}^{(e)}_i | \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) = (2\pi)^{-d/2}|\boldsymbol{\Sigma}_k|^{-1/2} \exp\left(-\frac{1}{2}(\mathbf{x}^{(e)}_i - \boldsymbol{\mu}_k)^T \boldsymbol{\Sigma}_k^{-1} (\mathbf{x}^{(e)}_i - \boldsymbol{\mu}_k)\right)
-$$
 
 ### 4. Interpretation via De-embedding
 
@@ -208,6 +205,7 @@ $$\mathbf{x}^{(e)}_i = \text{PCA}(\mathbf{v}_i) \in \mathbb{R}^{20}$$
 |1|1.8|-0.2|1.5|…|…|1.5|
 |2|-0.5|1.9|0.1|…|…|1.2|
 |3|2.1|-1.0|-0.3|…|…|0.3|
+
 **Researcher Note:**
 
 - **PC1:** 전투/경쟁 어조와 높은 상관관계 → "하드코어 액션"
