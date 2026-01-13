@@ -71,7 +71,8 @@ $$\mathbf{x}^{(e)}_i = \phi(\mathbf{v}_i) \in \mathbb{R}^d$$
 
 #### 3.2. Joint Mixture Model Specification
 
-전체 모집단이 $K$개의 잠재 클래스(Latent Class)로 구성된다고 가정합니다. 혼합형 데이터 $(\mathbf{x}^{(c)}_i, \mathbf{x}^{(e)}_i)$에 대한 결합 우도(Likelihood)는 다음과 같이 정의됩니다.
+전체 모집단이 $K$개의 잠재 클래스(Latent Class)로 구성된다고 가정합니다. "잠재 클래스가 주어졌을 때 범주형 변수와 연속형 변수는 조건부 독립(Conditionally Independent)"이라고 가정하면, 혼합형 데이터 $(\mathbf{x}^{(c)}_i, \mathbf{x}^{(e)}_i)$에 대한 결합 우도(Likelihood)는 다음과 같이 정의됩니다.
+
 
 $$\mathcal{L}(\Theta) = \sum_{i=1}^{n} \log \left( \sum_{k=1}^{K} \pi_k \cdot f_{\text{cat}}(\mathbf{x}^{(c)}_i | \boldsymbol{\alpha}_k) \cdot f_{\text{cont}}(\mathbf{x}^{(e)}_i | \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) \right)$$
 
@@ -92,12 +93,9 @@ $$f_{\text{cont}}(\mathbf{x}^{(e)}_i | \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k
 
 #### 4.1. 방법 A: 의미론적 앵커 (검색 기반)
 
-추정된 군집 중심 $\boldsymbol{\mu}_k$와 기하학적으로 가장 가까운 원본 데이터셋의 프로토타입 문서(Prototype Documents) 식별합니다.
+추정된 군집 중심 $\boldsymbol{\mu}_k$와 기하학적으로(Latent Space 상에서) 가장 가까운 원본 데이터셋의 프로토타입 문서를 식별합니다. GMM의 기하학적 구조와 일치시키기 위해 **유클리드 거리(또는 마할라노비스 거리)**를 최소화하는 관측치를 선택합니다.
 
-$$\text{Prototype}_k = \{ \mathbf{z}_j \mid \mathbf{z}_j \in \text{Dataset}, \text{argmax}_{j} \text{CosineSim}(\mathbf{x}^{(e)}_j, \boldsymbol{\mu}_k) \}$$
-
-- **활용:** 연구자가 실제 대표 텍스트를 읽음으로써 군집을 정성적으로 이해할 수 있게 합니다. (예: "이 군집은 '보이스피싱' 사건들을 대표한다.")
-    
+$$\text{Prototype}_k = \{ \mathbf{z}_j \mid \mathbf{z}_j \in \text{Dataset}, \underset{j}{\text{argmin}} || \mathbf{x}^{(e)}_j - \boldsymbol{\mu}_k ||_2 \}$$
 
 #### 4.2. 방법 B: 선형 디코더 (키워드 추출)
 
