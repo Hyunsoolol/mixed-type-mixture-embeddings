@@ -26,7 +26,7 @@ $$
 2. **비현실적 가정 (Unrealistic Assumption):** 자연어에서 단어 간의 독립성 가정은 현실적으로 위배되는 경우가 많습니다.
 
 ### 제안하는 접근법 (Our Approach)
-우리는 이진 특성 벡터를 LLM(예: SBERT, OpenAI)이 생성한 **밀집 임베딩(Dense Embeddings)**으로 바꾸면, 문제는 **혼합형 혼합 모형(범주형 + 연속형)**으로 변환됩니다. 다만 임베딩은 고차원이고 해석이 어려우므로, **(차원축소 → 혼합모형 적합 → 디베딩 해석)**을 하나의 파이프라인으로 고정합니다.
+우리는 이진 특성 벡터를 LLM(예: SBERT, OpenAI)이 생성한 밀집 임베딩(Dense Embeddings)으로 바꾸면, 문제는 혼합형 혼합 모형(범주형 + 연속형)으로 변환됩니다. 다만 임베딩은 고차원이고 해석이 어려우므로, (차원축소 → 혼합모형 적합 → 디베딩 해석)을 하나의 파이프라인으로 고정합니다.
 
 ## 3. Methodology
 
@@ -79,9 +79,9 @@ $$\mathcal{L}(\Theta) = \sum_{i=1}^{n} \log \left( \sum_{k=1}^{K} \pi_k \cdot f_
 
 - **혼합 비율 (Mixing Proportion):** $\pi_k$는 클래스 $k$의 사전 확률이며, $\sum_{k=1}^K \pi_k = 1$을 만족합니다.
     
-- **범주형 부분 (Categorical Part):** $f_{\text{cat}}$은 파라미터 $\boldsymbol{\alpha}_k$를 갖는 **다항 분포(Multinomial distribution)**를 따르며, 각 클래스 내 인구통계학적 변수의 분포를 포착합니다.
+- **범주형 부분 (Categorical Part):** $f_{\text{cat}}$은 파라미터 $\boldsymbol{\alpha}_k$를 갖는 항 분포(Multinomial distribution)를 따르며, 각 클래스 내 인구통계학적 변수의 분포를 포착합니다.
     
-- **연속형(임베딩) 부분 (Continuous Part):** $f_{\text{cont}}$는 **다변량 정규 분포(Multivariate Gaussian distribution)**를 따르며, 텍스트의 의미론적 군집을 포착합니다.
+- **연속형(임베딩) 부분 (Continuous Part):** $f_{\text{cont}}$는 다변량 정규 분포(Multivariate Gaussian distribution)를 따르며, 텍스트의 의미론적 군집을 포착합니다.
     
 
 $$f_{\text{cont}}(\mathbf{x}^{(e)}_i | \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) = (2\pi)^{-d/2}|\boldsymbol{\Sigma}_k|^{-1/2} \exp\left(-\frac{1}{2}(\mathbf{x}^{(e)}_i - \boldsymbol{\mu}_k)^T \boldsymbol{\Sigma}_k^{-1} (\mathbf{x}^{(e)}_i - \boldsymbol{\mu}_k)\right)$$
@@ -91,11 +91,11 @@ $$
 
 ### 4. Interpretation via De-embedding
 
-임베딩의 주요 과제는 해석력 부족입니다. 군집의 중심(Centroid) $\boldsymbol{\mu}_k$가 축소된 임베딩 공간에 존재하기 때문에, 사람은 이를 직관적으로 이해할 수 없습니다(Black-box). 우리는 각 잠재 클래스 $k$의 의미를 복원하기 위해 두 가지 **"디베딩(De-embedding)"** 방법을 제안합니다.
+임베딩의 주요 과제는 해석력 부족입니다. 군집의 중심(Centroid) $\boldsymbol{\mu}_k$가 축소된 임베딩 공간에 존재하기 때문에, 사람은 이를 직관적으로 이해할 수 없습니다(Black-box). 우리는 각 잠재 클래스 $k$의 의미를 복원하기 위해 두 가지 **디베딩(De-embedding)** 방법을 제안합니다.
 
 #### 4.1. 방법 A: 의미론적 앵커 (검색 기반)
 
-추정된 군집 중심 $\boldsymbol{\mu}_k$와 기하학적으로 가장 가까운 원본 데이터셋의 **프로토타입 문서(Prototype Documents)**를 식별합니다.
+추정된 군집 중심 $\boldsymbol{\mu}_k$와 기하학적으로 가장 가까운 원본 데이터셋의 프로토타입 문서(Prototype Documents) 식별합니다.
 
 $$\text{Prototype}_k = \{ \mathbf{z}_j \mid \mathbf{z}_j \in \text{Dataset}, \text{argmax}_{j} \text{CosineSim}(\mathbf{x}^{(e)}_j, \boldsymbol{\mu}_k) \}$$
 
@@ -238,7 +238,7 @@ $$f(\mathbf{x}_i | \Theta) = \sum_{k=1}^{K} \pi_k \underbrace{P(\mathbf{x}^{(c)}
 2. **연속형 변수:** 축소된 텍스트 특징(PC) + 성과 지표(CTR, CVR, ROAS)의 다변량 정규 분포
     
 
-즉, **"캠페인 속성 + 텍스트 의미 + 성과 패턴"**이 유사한 그룹끼리 묶이게 됩니다.
+즉, "캠페인 속성 + 텍스트 의미 + 성과 패턴"이 유사한 그룹끼리 묶이게 됩니다.
 
 ### 3.2. EM 알고리즘 수행 과정
 
@@ -302,11 +302,11 @@ Method A/B의 텍스트 해석과 모델의 다른 변수(범주형 $\mathbf{x}^
 
 수치 기반 특성과 LLM 기반 자연어 설명을 결합하여, 실무자가 직관적으로 이해할 수 있는 레이블을 부여합니다.
 
-|**Class**|**레이블 (Naming)**|**상세 설명 (Summary)**|
-|---|---|---|
-|**1**|**보상형 하드코어 프로모션**|강한 전투·보상 메시지(`지급`, `쿠폰`), **KR** 중심, Video/Facebook, **CVR**이 높아 단기 모객에 적합함.|
-|**2**|**캐주얼 감성 브랜딩**|귀여운/힐링 컨셉(`추억`, `감성`), **JP**·Image 비중 높음, 성과는 낮으나 리텐션 유지용 브랜딩에 적합함.|
-|**3**|**글로벌 체험형 퍼포먼스**|Playable/TikTok 중심, 그래픽·액션(`4K`, `Action`) 강조, **US** 비중 높고 **ROAS**가 매우 우수한 고효율 유형.|
+| **Class** | **레이블 (Naming)**  | **상세 설명 (Summary)**                                                                  |
+| --------- | ----------------- | ------------------------------------------------------------------------------------ |
+| **1**     | **보상형 하드코어 프로모션** | 강한 전투·보상 메시지(`지급`, `쿠폰`), **KR** 중심, Video/Facebook, **CVR**이 높아 단기 모객에 적합함.         |
+| **2**     | **캐주얼 감성 브랜딩**    | 귀여운/힐링 컨셉(`추억`, `감성`), **JP**·Image 비중 높음, 성과는 낮으나 리텐션 유지용 브랜딩에 적합함.                 |
+| **3**     | **글로벌 체험형 퍼포먼스**  | Playable/TikTok 중심, 그래픽·액션(`4K`, `Action`) 강조, **US** 비중 높고 **ROAS**가 매우 우수한 고효율 유형. |
 ### 활용 시나리오
 
 1. **예산 배분 최적화:** ROAS가 가장 높은 **Class 3** (글로벌 퍼포먼스) 군집에 마케팅 예산을 우선 배정.
