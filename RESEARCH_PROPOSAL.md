@@ -331,3 +331,4 @@ Method A/B의 텍스트 해석과 모델의 다른 변수(범주형 $\mathbf{x}^
 *Author: Hyunsoo Shin*
 
 *Affiliation: Department of Statistics, Sungkyunkwan University*
+
