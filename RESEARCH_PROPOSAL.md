@@ -178,7 +178,7 @@ $$\mathbf{v}_i = \text{SBERT}(\mathbf{z}_i) \in \mathbb{R}^{768}$$
 |1|전설 장비 100% 지급!|$(0.23, -0.11, \dots)$|
 |2|귀여운 캐릭터 힐링 RPG|$(0.05, 0.19, \dots)$|
 |3|실시간 PvP로 최강자를 증명하라!|$(-0.12, 0.33, \dots)$|
-![[Pasted image 20260115135151.png]]
+
 
 ---
 ### 2.2 차원축소 ($\mathbf{v}_i \to \mathbf{x}^{(e)}_i$)
