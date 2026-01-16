@@ -115,13 +115,97 @@ $$\hat{\mathbf{W}} = \underset{\mathbf{W}}{\text{argmin}} \sum_{i=1}^n || \mathb
 2. **통합 프레임워크 (Unified Framework):** 구조화된 인구통계 데이터와 비정형 텍스트 데이터를 결합하여 분석할 수 있는 엄밀한 통계적 모델을 제공합니다.
     
 3. **설명 가능성 (Explainability):** 제안된 디베딩 전략을 통해 "블랙박스" 신경망 임베딩과 "화이트박스" 통계적 추론 사이의 간극을 해소했습니다.
-## 5. References
+
+
+## 5. Simulation Study Design (Categorical vs BoW vs Embedding)
+
+본 연구의 핵심 주장을 정량적으로 검증하기 위해, 텍스트 생성 과정이 BoW 가정에 유리한 경우와 불리한 경우를 모두 포함하는 시뮬레이션을 설계합니다.
+
+1. **Categorical-only Limitation:** 범주형 변수만으로는 잠재 의미 구조 복원에 한계가 있음을 증명.
+    
+2. **BoW Limitation:** 단순 단어 빈도(BoW)는 의미적 동치(패러프레이즈)를 놓침을 증명.
+    
+3. **Proposed Advantage:** LLM 임베딩+혼합모형이 의미 기반 클래스 회복력과 해석 가능성을 동시에 제공함을 증명.
+    
+
+### 5.1. Data Generating Process (DGP)
+
+관측치 $i=1,\dots,n$에 대해 잠재 클래스 $C_i \in {1,\dots,K}$를 정의합니다.
+
+$$C_i \sim \text{Categorical}(\pi_1,\dots,\pi_K), \quad \sum_{k=1}^K \pi_k = 1$$
+
+관측 데이터는 범주형 블록 $\mathbf{x}_i^{(c)}$와 텍스트 $\mathbf{z}_i$로 구성됩니다.
+
+#### 5.1.1 Categorical Block $\mathbf{x}^{(c)}$ (LCA-style)
+
+범주형 변수 $j=1,\dots,p_c$가 각각 $L_j$개의 레벨을 갖는다고 할 때, 조건부 독립을 가정합니다.
+
+$$f_{\text{cat}}(\mathbf{x}_i^{(c)}\mid C_i=k) = \prod_{j=1}^{p_c}\prod_{\ell=1}^{L_j}\alpha_{kj\ell}^{\mathbb{1}(x_{ij}^{(c)}=\ell)}$$
+
+### 5.2. Text Generation Regimes
+
+비교의 공정성을 위해 두 가지 레짐(Regime)을 설정합니다.
+
+#### Regime A: BoW-friendly (Multinomial Mixture)
+
+BoW 가정이 성립하는 세계입니다. 클래스별 단어 분포 $\theta_k$에서 단어가 독립적으로 생성됩니다.
+
+$$\mathbf{w}_i \mid (C_i=k) \sim \text{Multinomial}(N_i, \theta_k)$$
+
+이 레짐에서는 BoW 모델이 통계적으로 정합하므로 강한 성능을 낼 것으로 예상됩니다.
+
+#### Regime B: Semantic-friendly (Paraphrase/Synonym)
+
+BoW의 독립성 가정이 깨지고, **의미적 동치(Semantic Equivalence)**가 중요한 세계입니다.
+
+문서별 의미 잠재벡터 $s_i$를 도입하고, 단어 확률 벡터 $p_i$는 로지스틱-노멀(Logistic-Normal) 분포를 따르며 단어 간 공분산을 갖습니다.
+
+$$s_i \mid (C_i=k) \sim \mathcal{N}(m_k, I_q)$$
+
+$$p_i = \text{softmax}(B s_i + \epsilon_i), \quad \epsilon_i \sim \mathcal{N}(0, \sigma^2 I)$$
+
+또한 **동의어 그룹(Synonym Group)**을 설정하여, 서로 다른 표면 단어가 동일한 의미를 갖도록 설계합니다. 이는 짧은 광고 카피에서 흔히 발생하는 패러프레이즈 현상을 모사합니다.
+
+### 5.3. Comparison Models
+
+동일한 DGP로 생성된 데이터에 대해 세 가지 모델을 적합하여 비교합니다.
+
+1. **Model (A) Categorical-only (LCA):** 텍스트를 무시하고 $\mathbf{x}^{(c)}$만 사용.
+    
+2. **Model (B) BoW-based Mixture:** 텍스트를 BoW 카운트 벡터 $\mathbf{w}_i$로 변환하여 Dirichlet-Multinomial Mixture 적합.
+    
+3. **Model (C) Proposed (Embedding-based):** 텍스트를 임베딩 $\mathbf{v}_i$로 변환 후 차원축소하여 $\mathbf{x}^{(e)}$를 생성, GMM 적합. (현실성을 위해 임베딩 노이즈 $\delta_i$ 추가)
+    
+
+### 5.4. Evaluation Metrics
+
+- **Clustering Recovery:** Adjusted Rand Index (ARI), NMI, Classification Error.
+    
+- **Model Selection:** BIC를 통한 정답 클래스 개수($K$) 선택 정확도.
+    
+- **Explainability (De-embedding):**
+    
+    - **Prototype Precision:** 추출된 앵커 문서가 실제 해당 클래스의 의미(Planted Truth)와 일치하는지 평가.
+        
+    - **Keyword Overlap:** Method B로 추출한 키워드 집합과 실제 생성 시 사용된 주요 단어 집합 간의 일치도 (Overlap@T).
+        
+
+### 5.5. Expected Outcomes
+
+- **Regime A:** BoW 모델이 우수하거나 제안 방법론과 유사한 성능.
+    
+- **Regime B:** 동의어/변형이 많아질수록 BoW 성능은 급격히 하락하지만, **제안 방법론(임베딩)**은 의미 정보를 보존하여 높은 군집 회복력을 유지함.
+    
+- **Conclusion:** 텍스트의 의미적 변형이 심한 도메인(예: 광고, 소셜 미디어)에서는 임베딩 기반 혼합 모형이 필수적임을 입증.
+
+## 6. References
 
 - **Primary Reference:** Shi, J., Wang, F., Gao, Y., Song, X., & Wang, H. (2024). _Mixture conditional regression for estimating extralegal factor effects_. The Annals of Applied Statistics, 18(3), 2535-2550.
     
 - **Mixture Models:** Scrucca, L., Fop, M., Murphy, T. B., & Raftery, A. E. (2016). _mclust 5: clustering, classification and density estimation using Gaussian finite mixture models_. The R Journal, 8(1), 289.
     
 - **Embeddings:** Reimers, N., & Gurevych, I. (2019). _Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks_.
+
 
 # 게임 마케팅 데이터에 방법론 적용 예시
 
