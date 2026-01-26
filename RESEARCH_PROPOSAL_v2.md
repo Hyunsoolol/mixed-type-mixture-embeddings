@@ -84,8 +84,7 @@ $$\boldsymbol{\mu}_k = \boldsymbol{\mu}_0 + \boldsymbol{\delta}_k, \quad \text{s
 불필요한 차원의 편차를 0으로 만들기 위해, 로그 우도 함수에 **적응형 라소(Adaptive Lasso)** 페널티를 적용한 목적 함수 $\mathcal{Q}$를 최대화합니다.
 
 
-$$\max_{\Theta} \left\{ \sum_{i=1}^{n} \log f(\mathbf{x}_i | \Theta) - n\lambda \sum_{j=1}^{D} \sum_{k=1}^{K} w_{jk} |\delta_{jk}| \right\}$$
-
+$$\max_{\Theta} \{ \sum_{i=1}^{n} \log f(\mathbf{x}_i | \Theta) - n\lambda \sum_{j=1}^{D} \sum_{k=1}^{K} w_{jk} |\delta_{jk}|\}$$
 
 이를 위해 **Generalized EM 알고리즘**을 수행합니다.
 
