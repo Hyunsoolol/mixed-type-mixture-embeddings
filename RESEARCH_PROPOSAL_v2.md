@@ -30,7 +30,7 @@
 
 관측치 $i$는 범주형 데이터 $\mathbf{x}^{(c)}_i$와 텍스트 데이터 $\mathbf{z}_i$로 구성됩니다. 제안된 프레임워크는 **특징 추출(Feature Representation)**, **모형 적합(Modeling)**, **해석(Interpretation)**의 3단계로 구성됩니다.
 
-```
+```mermaid
 graph TD
     subgraph Phase 1: Feature Representation
     A[Raw Text Z] -->|SBERT Embedding| B(Dense Vectors V)
