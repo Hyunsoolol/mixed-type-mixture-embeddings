@@ -448,7 +448,7 @@ mstep_mix_hp <- function(y, X, tau, beta0, Bfree, rho, pi,
         partial_l <- rmat[, l] + xk * bcur
         partial_m <- rmat[, m] - xk * bcur  # sign handling for Bm
         
-        cval <- sum(tau[, l] * xk * partial_l + tau[, m] * (-xk) * partial_m)
+        cval <- sum(tau[, l] * (-xk) * partial_l + tau[, m] * ( xk) * partial_m)
         
         lam1 <- n * lam * pen_wB[k, l]
         lam2 <- n * lam * pen_wB[k, m]
@@ -668,7 +668,7 @@ fit_mix_HP_L_or_AL <- function(y, X, m, lam,
   best_obj <- -Inf
   
   for (s in 1:n_start) {
-    set.seed(seed_base + 2000*s + 23*m)
+    set.seed(safe_seed(seed_base + 2000*s + 23*m))
     
     z <- sample.int(m, n, replace = TRUE)
     tau <- matrix(0, n, m)
