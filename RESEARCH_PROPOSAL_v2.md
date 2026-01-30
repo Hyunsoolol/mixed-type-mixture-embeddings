@@ -93,8 +93,10 @@ $$\boldsymbol{\mu}_k = \boldsymbol{\mu}_0 + \boldsymbol{\delta}_k$$
 식별을 위해 본 연구는 다음 제약을 권장한다(혼합 가중치 기반 식별).
 
 $$\sum_{k=1}^K \pi_k \boldsymbol{\delta}_k = \mathbf{0}$$
-$\boldsymbol{\mu}_0$: mixture-weighted overall mean (Common Mean)
-$\boldsymbol{\delta}_k$: 군집 $k$의 평균 편차(Cluster-specific deviation). $\delta_{kj} \neq 0$인 PC 좌표 $j$가 이질성의 원인(heterogeneous feature)이 된다.
+
+- $\boldsymbol{\mu}_0$: mixture-weighted overall mean (Common Mean)
+
+- $\boldsymbol{\delta}_k$: 군집 $k$의 평균 편차(Cluster-specific deviation). $\delta_{kj} \neq 0$인 PC 좌표 $j$가 이질성의 원인(heterogeneous feature)이 된다.
     
 
 ### 3.3 Penalized Estimation via Generalized EM
