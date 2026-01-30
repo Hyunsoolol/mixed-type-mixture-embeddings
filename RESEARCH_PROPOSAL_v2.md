@@ -126,7 +126,7 @@ $$\gamma_{ik} = \frac{\pi_k f_{\text{cat}}(\mathbf{x}_i^{(c)} | \boldsymbol{\alp
         
     - **(a) Update $\delta_{kj}$ (Soft-thresholding):**
         
-        $$\delta_{kj} \leftarrow S\left( \bar{x}_{kj} - \mu_{0j}, \frac{n\lambda w_{jk} \sigma_{kj}^2}{N_k} \right),$$
+        $$\delta_{kj} \leftarrow S\left( \bar{x}_{kj} - \mu_{0j}, \frac{n \lambda w_{jk} \sigma_{kj}^2}{N_k} \right)$$
       
         $$S(a, \tau) = \text{sign}(a)\max(|a|-\tau, 0)$$
         
