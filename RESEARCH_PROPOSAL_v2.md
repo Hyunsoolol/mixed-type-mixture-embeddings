@@ -103,7 +103,7 @@ $$\sum_{k=1}^K \pi_k \boldsymbol{\delta}_k = \mathbf{0}$$
 
 불필요한 차원의 편차를 0으로 수축시키기 위해, $\boldsymbol{\delta}$에 Adaptive Lasso 벌점을 부여한다.
 
-$$\max_{\Theta} \left\{ \sum_{i=1}^n \log f(\mathbf{x}_i | \Theta) - n\lambda \sum_{j=1}^D \sum_{k=1}^K w_{jk} |\delta_{kj}| \right\}$$
+$$\max_{\Theta} \{ \sum_{i=1}^n \log f(\mathbf{x}_i | \Theta) - n\lambda \sum_{j=1}^D \sum_{k=1}^K w_{jk} |\delta_{kj}| \}$$
 
 - $w_{jk}$: adaptive weight ($w_{jk} = 1/(|\tilde{\delta}_{kj}| + \epsilon)^\nu$)
     
