@@ -122,7 +122,7 @@ $$\gamma_{ik} = \frac{\pi_k f_{\text{cat}}(\mathbf{x}_i^{(c)} | \boldsymbol{\alp
     
 - Continuous parameters (Coordinate-wise updates):
     
-    - $N_k = \sum_{i=1}^n \gamma_{ik}$, $\bar{x}_{kj} = \frac{1}{N_k} \sum_{i=1}^n \gamma_{ik} x_{ij}^{(e)}$
+    - $N_k = \sum_{i=1}^n \gamma_{ik}$, $\bar{x}_{kj} = \frac{1}{N_k}\sum_{i=1}^n\gamma_{ik} x_{ij}^{(e)}$
         
     - (a) Update $\delta_{kj}$ (Soft-thresholding):
         
