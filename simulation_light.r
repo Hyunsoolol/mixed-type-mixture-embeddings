@@ -4,7 +4,7 @@
 # - BIC over m in {2,3,4} and lambda grid
 # - EM + coordinate descent (weighted lasso)
 #
-# LIGHT MODE (당신이 요청한 "가벼운 모드" 반영):
+# LIGHT MODE
 # - nlambda = 30
 # - max_em  = 100
 # - R (reps)= 2
@@ -34,12 +34,12 @@ CFG <- list(
 )
 
 if (LIGHT_MODE) {
-  # 사용자 요청 핵심 3개는 무조건 반영
+  # 핵심 3개
   CFG$R       <- 2
   CFG$nlambda <- 30
   CFG$max_em  <- 100
   
-  # 아래 2개는 “선택적” 속도옵션. 원하면 주석 해제/값 조정.
+  # 아래 2개는 선택
   # CFG$n_start <- 3
   # CFG$max_cd  <- 400
 }
