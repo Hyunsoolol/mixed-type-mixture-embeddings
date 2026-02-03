@@ -1,14 +1,24 @@
 # ============================================================
 # Li et al. (Biometrics) simulation reproduction (CORRECTED + TRACE)
-# - Methods: Mix-L, Mix-AL, Mix-HP-L, Mix-HP-AL
-# - BIC over m in {2,3,4} and lambda grid
-# - EM + coordinate descent (weighted lasso)
 #
-# LIGHT MODE
-# - nlambda = 30
-# - max_em  = 100
-# - R (reps)= 2
-# (추가로, n_start / max_cd는 기본값 유지 가능하지만, 시간 절감용 옵션으로 CFG에 포함)
+# 목적
+# - 혼합 회귀(mixture regression) 시뮬레이션을 생성하고,
+#   4가지 추정법(Mix-L, Mix-AL, Mix-HP-L, Mix-HP-AL)을 구현/비교한다.
+# - m ∈ {2,3,4}, lambda grid에 대해 BIC 최소값으로 모델 선택.
+#
+# 핵심 파라미터화(scaled form)
+# - 원모형: y_i | z_i=j ~ N( X_i^T b_j , sigma_j^2 )
+# - 코드에서는 rho_j = 1/sigma_j, beta_tilde_j = rho_j * b_j 를 사용.
+#   r_ij = rho_j*y_i - X_i^T beta_tilde_j 로 쓰면,
+#   log-likelihood에 log(rho_j) 항이 자연스럽게 들어가고 EM/M-step이 단순해진다.
+#
+# HP(Heterogeneity Pursuit) 분해
+# - beta_tilde_j = beta0 (common) + B_j (hetero),  sum_j B_j = 0 제약.
+# - 구현은 Bfree(첫 m-1개)만 최적화하고 마지막은 -rowSums(Bfree)로 강제.
+#
+# 평가
+# - label switching 때문에 component 순서를 permutation 매칭한 뒤
+#   MSE(b), MSE(pi), MSE(sigma^2), FPR/TPR/FHR 등을 계산한다.
 # ============================================================
 
 options(stringsAsFactors = FALSE)
@@ -16,6 +26,8 @@ options(stringsAsFactors = FALSE)
 # =========================
 # LIGHT MODE CONFIG
 # =========================
+# - 코드 구조 + 정상 작동 확인용 경량 설정
+# - 핵심 3개: R=2, nlambda=30, max_em=100
 LIGHT_MODE <- TRUE
 
 CFG <- list(
@@ -27,26 +39,27 @@ CFG <- list(
   max_em   = 100,    # EM 최대 반복
   tol_em   = 1e-5,
   pilot_em = 30,
-  n_start  = 10,     # (가벼운 모드에서 더 줄이고 싶으면 3~5 권장)
-  max_cd   = 1000,   # (가벼운 모드에서 더 줄이고 싶으면 300~500 권장)
+  n_start  = 10,     # random start 개수(속도 줄이려면 3~5도 가능)
+  max_cd   = 1000,   # CD 최대 반복(속도 줄이려면 300~500도 가능)
   tol_cd   = 1e-7,
   min_cd   = 10
 )
 
 if (LIGHT_MODE) {
-  # 핵심 3개
   CFG$R       <- 2
   CFG$nlambda <- 30
   CFG$max_em  <- 100
   
-  # 아래 2개는 선택
+  # 아래 2개는 “선택적” 속도 옵션
   # CFG$n_start <- 3
   # CFG$max_cd  <- 400
 }
 
 # -------------------------
-# Small utilities
+# Utilities (수치/로그 안정성용)
 # -------------------------
+
+# safe_seed(x): seed 입력을 안전한 int 범위로 변환(재현성 + 오류 방지)
 safe_seed <- function(x) {
   m <- .Machine$integer.max
   s <- suppressWarnings(as.numeric(x))
@@ -56,37 +69,43 @@ safe_seed <- function(x) {
   as.integer(s)
 }
 
+# soft_thresh(z, g): L1 penalty의 soft-thresholding
 soft_thresh <- function(z, g) {
   if (z >  g) return(z - g)
   if (z < -g) return(z + g)
   0
 }
 
+# logsumexp(v): log(sum(exp(v))) 안정 계산(underflow/overflow 방지)
 logsumexp <- function(v) {
   m <- max(v)
   m + log(sum(exp(v - m)))
 }
 
+# clamp: adaptive weight 폭주 방지용
 clamp <- function(x, lo, hi) pmax(lo, pmin(hi, x))
 
+# 출력 포맷
 fmt_num <- function(x, d = 6) {
   if (length(x) == 0 || all(is.na(x))) return("NA")
   formatC(x, digits = d, format = "f")
 }
-
 now_str <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S")
 
 # -------------------------
-# Covariance matrices
+# Covariance matrices (X 생성용)
 # -------------------------
+# correlated=TRUE면 Toeplitz(0.5^{|i-j|}), 기본은 독립(diag)
 cov_mat <- function(p, correlated = FALSE) {
   if (!correlated) return(diag(p))
   toeplitz(0.5^(0:(p - 1)))
 }
 
 # -------------------------
-# [FIX 4] Adaptive weights: DO NOT Normalize
+# Adaptive weights (Adaptive Lasso)
 # -------------------------
+# - w_k = 1/(|beta_k|^gamma + eps)
+# - "정규화하지 않음": penalty 크기/스케일을 임의로 바꾸지 않기 위함
 make_adaptive_weights <- function(beta_mat, gamma = 1,
                                   eps = 1e-4, w_min = 1e-2, w_max = 1e4) {
   w <- 1 / (abs(beta_mat)^gamma + eps)
@@ -97,11 +116,15 @@ make_adaptive_weights <- function(beta_mat, gamma = 1,
 # -------------------------
 # SNR <-> delta mapping
 # -------------------------
+# 논문 세팅을 따라 noise scale(delta)을 SNR과 연결
 delta_from_snr <- function(snr) 25 / snr
 
 # -------------------------
-# True scaled betas
+# True scaled betas (신호 구조)
 # -------------------------
+# - relevant: 1:10
+# - common:   1:7
+# - hetero:   8:10 (component별로 상이)
 true_scaled_betas <- function(p, delta) {
   stopifnot(p >= 10)
   beta0  <- rep(0, p)
@@ -117,9 +140,16 @@ true_scaled_betas <- function(p, delta) {
   list(beta0 = beta0, beta_het = cbind(beta1, beta2, beta3))
 }
 
-# -------------------------
-# Data generator
-# -------------------------
+# ============================================================
+# Data generator (시뮬레이션 데이터 생성)
+# ============================================================
+# simulate_dataset()
+# - X ~ N(0, Sigma)
+# - m_true=3, pi_true=(1/3,1/3,1/3)
+# - sigma^2_true = delta*(0.1,0.1,0.4)
+# - scaled beta_tilde_true = beta0 + beta_het[,j]
+# - 원모형 계수 b_true = beta_tilde_true / rho_true
+# - y_i = X_i^T b_{z_i} + N(0, sigma_{z_i}^2)
 simulate_dataset <- function(n = 200, p = 60, snr = 50, correlated = FALSE, seed = NULL) {
   if (!is.null(seed)) set.seed(seed)
   
@@ -148,7 +178,7 @@ simulate_dataset <- function(n = 200, p = 60, snr = 50, correlated = FALSE, seed
   
   z <- sample.int(m_true, size = n, replace = TRUE, prob = pi_true)
   
-  # IMPORTANT: this is correct
+  # 핵심: i별로 자기 component 계수(b_true[, z_i])와 X_i 내적을 계산
   mu <- rowSums(X * t(b_true[, z, drop = FALSE]))
   y  <- rnorm(n, mean = mu, sd = sigma_true[z])
   
@@ -164,9 +194,12 @@ simulate_dataset <- function(n = 200, p = 60, snr = 50, correlated = FALSE, seed
   )
 }
 
-# -------------------------
-# Log-likelihood & E-step
-# -------------------------
+# ============================================================
+# Log-likelihood & E-step (scaled form)
+# ============================================================
+# loglik_mix_scaled:
+# - r_ij = rho_j*y_i - X_i^T beta_tilde_j
+# - log f(y_i|j) ∝ log(rho_j) - 0.5 r_ij^2 (상수항 포함)
 loglik_mix_scaled <- function(y, X, beta_tilde_hat, rho_hat, pi_hat) {
   n <- length(y); m <- length(pi_hat)
   ll <- 0
@@ -183,6 +216,9 @@ loglik_mix_scaled <- function(y, X, beta_tilde_hat, rho_hat, pi_hat) {
   ll
 }
 
+# estep_tau:
+# - 책임도 tau_{ij} = P(z_i=j | y_i, X_i) 계산
+# - log-space에서 logsumexp로 normalize
 estep_tau <- function(y, X, beta_tilde, rho, pi) {
   n <- length(y); m <- length(pi)
   logw <- matrix(0, n, m)
@@ -199,6 +235,12 @@ estep_tau <- function(y, X, beta_tilde, rho, pi) {
   tau
 }
 
+# ============================================================
+# rho update (sigma update 대체)
+# ============================================================
+# update_rho_quad:
+# - M-step에서 rho_j=1/sigma_j를 가중 구조로 업데이트(수치 안정)
+# - rho_floor로 0에 붙는 것 방지
 update_rho_quad <- function(y, mu, w, rho_floor = 1e-8) {
   A <- sum(w) + 1e-12
   C <- sum(w * y^2) + 1e-12
@@ -208,9 +250,12 @@ update_rho_quad <- function(y, mu, w, rho_floor = 1e-8) {
   max(rho, rho_floor)
 }
 
-# -------------------------
-# Weighted Ridge WLS (for initialization/pilot)
-# -------------------------
+# ============================================================
+# Weighted Ridge WLS (초기화 / pilot EM)
+# ============================================================
+# ridge_wls:
+# - (X^T W X + alpha I)^{-1} X^T W y
+# - solve 실패 시 qr.solve fallback
 ridge_wls <- function(X, y, w, alpha) {
   XtW <- t(X) * w
   A <- XtW %*% X
@@ -221,9 +266,10 @@ ridge_wls <- function(X, y, w, alpha) {
   out
 }
 
-# -------------------------
-# [FIX 2] Initialization Helper from tau
-# -------------------------
+# init_from_tau:
+# - hard/soft assignment(tau)로부터 초기 pi, rho, beta_tilde 생성
+# - 각 component별 ridge로 b_j -> residual로 sigma^2 -> rho=1/sqrt(s2)
+# - scaled 계수 beta_tilde = b_j * rho_j 로 저장
 init_from_tau <- function(y, X, tau,
                           ridge_scale = 1e-3,
                           sigma2_floor = 1e-6,
@@ -267,9 +313,12 @@ init_from_tau <- function(y, X, tau,
   list(pi = pi, rho = rho_init, beta_tilde = phi_init, b = b_init)
 }
 
-# -------------------------
-# CD Solvers
-# -------------------------
+# ============================================================
+# Coordinate Descent solvers
+# ============================================================
+# lasso_cd_weighted:
+# - argmin_b 0.5*sum_i w_i (y_i - x_i^T b)^2 + lam*sum_k pen_w[k]|b_k|
+# - 좌표별 soft-thresholding으로 업데이트
 lasso_cd_weighted <- function(X, y, w, lam, pen_w = NULL,
                               b_init = NULL,
                               maxit = 500, tol = 1e-8, minit = 10) {
@@ -298,6 +347,9 @@ lasso_cd_weighted <- function(X, y, w, lam, pen_w = NULL,
   b
 }
 
+# update_two_abs_1d:
+# - HP에서 |b| + |b+s| 구조(two absolute penalties) 1D 업데이트
+# - 후보해들을 열거하여 목적함수 최소값 선택(안정성 우선)
 update_two_abs_1d <- function(a, c, s, lam1, lam2) {
   if (a < 1e-12) return(0)
   cand <- c(0, -s)
@@ -314,9 +366,13 @@ update_two_abs_1d <- function(a, c, s, lam1, lam2) {
   cand[which.min(vals)]
 }
 
-# -------------------------
-# M-step: Mix-L / Mix-AL
-# -------------------------
+# ============================================================
+# M-step: Mix-L / Mix-AL (component별 Lasso/Adaptive Lasso)
+# ============================================================
+# mstep_mix_lasso:
+# - pi 업데이트: mean(tau)
+# - beta_tilde_j 업데이트: weighted lasso_cd_weighted (yj = rho_j*y 사용)
+# - rho 업데이트: update_rho_quad
 mstep_mix_lasso <- function(y, X, tau, beta_tilde, rho, pi,
                             lam, pen_w_list,
                             max_cd = 500, tol_cd = 1e-8, min_cd = 10,
@@ -343,9 +399,14 @@ mstep_mix_lasso <- function(y, X, tau, beta_tilde, rho, pi,
   list(beta_tilde = beta_new, rho = rho_new, pi = pi_new)
 }
 
-# -------------------------
-# M-step: Mix-HP
-# -------------------------
+# ============================================================
+# M-step: Mix-HP (HP: common + hetero, sum-to-zero 제약)
+# ============================================================
+# mstep_mix_hp:
+# - beta_tilde_j = beta0 + B_j, sum_j B_j = 0
+# - Bfree(첫 m-1개)만 업데이트하고 B_m = -rowSums(Bfree)
+# - CD로 beta0(공통) 먼저 업데이트 후 Bfree(이질) 업데이트
+# - rebuild_every 주기마다 잔차를 재구축(드리프트 방지)
 mstep_mix_hp <- function(y, X, tau, beta0, Bfree, rho, pi,
                          lam, pen_w0, pen_wB,
                          max_cd = 500, tol_cd = 1e-8, min_cd = 10,
@@ -374,7 +435,7 @@ mstep_mix_hp <- function(y, X, tau, beta0, Bfree, rho, pi,
   for (it in 1:max_cd) {
     maxchg <- 0
     
-    # Update Beta0 (Common)
+    # ---- Update beta0 (common) ----
     for (k in 1:p) {
       xk <- Xcols[[k]]
       a <- sum((xk^2) * rowSums(tau))
@@ -392,7 +453,8 @@ mstep_mix_hp <- function(y, X, tau, beta0, Bfree, rho, pi,
       }
     }
     
-    # Update Bfree (Hetero)
+    # ---- Update Bfree (hetero) ----
+    # 마지막 component(m)은 B_m = -sum_{l=1}^{m-1} B_l 로 묶여 있음
     for (l in 1:(m - 1)) {
       for (k in 1:p) {
         xk <- Xcols[[k]]
@@ -405,7 +467,8 @@ mstep_mix_hp <- function(y, X, tau, beta0, Bfree, rho, pi,
         partial_l <- rmat[, l] + xk * bcur
         partial_m <- rmat[, m] - xk * bcur
         
-        # [FIX 1] CRITICAL SIGN FIX
+        # CRITICAL: sign 구조
+        # l의 기여는 +, 마지막 component(m)의 기여는 - 로 들어가야
         cval <- sum(tau[, l] * xk * partial_l - tau[, m] * xk * partial_m)
         
         lam1 <- n * lam * pen_wB[k, l]
@@ -434,6 +497,7 @@ mstep_mix_hp <- function(y, X, tau, beta0, Bfree, rho, pi,
     if (it >= min_cd && maxchg < tol_cd) break
   }
   
+  # rho 업데이트(최종 beta0/Bfull로 mu 계산)
   Bfull <- make_Bfull(Bfree_new)
   for (j in 1:m) {
     w  <- tau[, j]
@@ -444,9 +508,12 @@ mstep_mix_hp <- function(y, X, tau, beta0, Bfree, rho, pi,
   list(beta0 = beta0_new, Bfull = Bfull, Bfree = Bfree_new, rho = rho_new, pi = pi_new)
 }
 
-# -------------------------
-# Pilot Ridge EM (Mix)
-# -------------------------
+# ============================================================
+# Pilot Ridge EM (Adaptive weights 생성용 기반)
+# ============================================================
+# pilot_ridge_em_mix:
+# - penalty 없이 ridge 기반 EM을 짧게 돌려 안정적인 beta_tilde/rho/pi를 만든다
+# - Adaptive Lasso 가중치 계산에 사용
 pilot_ridge_em_mix <- function(y, X, m, n_start = 1, seed_base = 1,
                                max_em = 30, ridge_scale = 1e-3,
                                min_pi = 1e-6, rho_floor = 1e-8,
@@ -497,9 +564,12 @@ pilot_ridge_em_mix <- function(y, X, m, n_start = 1, seed_base = 1,
   best
 }
 
-# -------------------------
-# Fit Mix-L / Mix-AL  (TRACE inside EM)
-# -------------------------
+# ============================================================
+# Fit Mix-L / Mix-AL (EM + CD + TRACE)
+# ============================================================
+# fit_mix_L_or_AL:
+# - 여러 random start 중 penalized objective 최대 해 선택
+# - Mix-AL은 pilot ridge EM으로 adaptive weights를 만든 뒤 고정하고 EM 수행
 fit_mix_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
                             pilot_em = 30, pilot_ridge_scale = 1e-3,
                             w_eps = 1e-4, w_min = 1e-2, w_max = 1e4,
@@ -524,6 +594,7 @@ fit_mix_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
     for (j in 1:m) pen_w_list[[j]] <- rep(1, p)
     
     if (adaptive) {
+      # pilot로 beta_tilde 안정화 후 adaptive weights 계산
       pil <- pilot_ridge_em_mix(y, X, m, n_start = 1, seed_base = seed_base + s*1000,
                                 max_em = pilot_em, ridge_scale = pilot_ridge_scale,
                                 min_pi = min_pi, rho_floor = rho_floor,
@@ -562,6 +633,7 @@ fit_mix_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
       ll_old <- ll
     }
     
+    # penalized objective (선택 기준)
     pen <- 0
     for (j in 1:m) pen <- pen + sum(pen_w_list[[j]] * abs(beta_tilde[, j]))
     obj <- ll_old - n * lam * pen
@@ -576,9 +648,12 @@ fit_mix_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
   best
 }
 
-# -------------------------
-# Fit Mix-HP-L / Mix-HP-AL  (TRACE inside EM)
-# -------------------------
+# ============================================================
+# Fit Mix-HP-L / Mix-HP-AL (EM + HP-CD + TRACE)
+# ============================================================
+# fit_mix_HP_L_or_AL:
+# - beta_tilde를 beta0 + B로 분해(sum-to-zero)
+# - Adaptive인 경우 Mix-L pilot로 beta_pilot을 얻어 pen_w0/pen_wB 생성
 fit_mix_HP_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
                                pilot_em = 30, w_eps = 1e-4, w_min = 1e-2, w_max = 1e4,
                                max_em = 200, tol_em = 1e-5,
@@ -601,15 +676,17 @@ fit_mix_HP_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
     pi <- ini$pi; rho <- ini$rho
     beta_tilde_init <- ini$beta_tilde
     
+    # beta_tilde -> beta0 + B 분해(초기)
     beta0 <- rowMeans(beta_tilde_init)
     Bfull <- sweep(beta_tilde_init, 1, beta0, "-")
     Bfree <- Bfull[, 1:(m - 1), drop = FALSE]
     
+    # 기본은 lasso: pen=1
     pen_w0 <- rep(1, p)
     pen_wB <- matrix(1, p, m)
     
-    # Adaptive weights setup using Mix-L (Lasso) pilot
     if (adaptive) {
+      # Adaptive weight용 pilot: Mix-L을 한 번 돌려 beta_pilot 확보
       pilot_lam <- 0.001
       pil_fit <- fit_mix_L_or_AL(y, X, m, lam = pilot_lam, adaptive = FALSE,
                                  n_start = 1, seed_base = seed_base + s*999,
@@ -618,7 +695,6 @@ fit_mix_HP_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
       if (!is.null(pil_fit)) {
         beta_pilot <- pil_fit$beta_tilde
         
-        # [FIX 5] BUGFIX: pi <- pil$pi (undefined) -> pi <- pil_fit$pi
         rho <- pil_fit$rho
         pi  <- pil_fit$pi
         
@@ -637,6 +713,7 @@ fit_mix_HP_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
     em_iter_done <- 0
     
     for (iter in 1:max_em) {
+      # 현재(beta0,Bfree)로 beta_tilde 재구성
       Bfull <- cbind(Bfree, -rowSums(Bfree))
       beta_tilde <- sapply(1:m, function(j) beta0 + Bfull[, j])
       beta_tilde <- matrix(beta_tilde, nrow = p, ncol = m)
@@ -670,6 +747,7 @@ fit_mix_HP_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
       ll_old <- ll
     }
     
+    # penalized objective (선택 기준)
     Bfull <- cbind(Bfree, -rowSums(Bfree))
     pen <- sum(pen_w0 * abs(beta0)) + sum(pen_wB * abs(Bfull))
     obj <- ll_old - n * lam * pen
@@ -686,12 +764,17 @@ fit_mix_HP_L_or_AL <- function(y, X, m, lam, adaptive = FALSE, gamma = 1,
   best
 }
 
-# -------------------------
-# Fit by BIC
-# -------------------------
+# ============================================================
+# BIC / df / lambda grid
+# ============================================================
 bic_mix <- function(ll, df, n) -2 * ll + df * log(n)
+
+# count_nz: df 근사에서 nonzero 개수 카운트
 count_nz <- function(v, tol = 1e-6) sum(abs(v) > tol)
 
+# lambda_grid:
+# - lam_max는 대략 "모든 계수가 0"이 되는 수준(근사)
+# - lam_min = lam_max * ratio, log-scale grid
 lambda_grid <- function(y, X, nlambda = 50, ratio = 1e-4) {
   n <- length(y)
   rho0 <- 1 / (sd(y) + 1e-12)
@@ -701,11 +784,16 @@ lambda_grid <- function(y, X, nlambda = 50, ratio = 1e-4) {
   exp(seq(log(lam_max), log(lam_min), length.out = nlambda))
 }
 
-# =========================
-# fit_by_bic (TRACE ADDED)
-# - LIGHT MODE 반영 포인트:
-#   * nlambda, max_em 을 fit_by_bic에서 인자로 받아 내부 fit_*로 전달
-# =========================
+# ============================================================
+# fit_by_bic: (method, m, lambda) grid search + TRACE
+# ============================================================
+# - method별로 fit_* 호출
+# - df 근사:
+#   * Mix-L / Mix-AL: nz(beta_tilde) + (m-1) + m
+#   * Mix-HP-L / Mix-HP-AL: nz(beta0) + nz(Bfree) + (m-1) + m
+# - TRACE:
+#   * GRID-PROG: 진행률/elapsed/bestBIC 출력
+#   * GRID-BEST: 전체 best 갱신 시 상세 출력
 fit_by_bic <- function(y, X, method, m_set = 2:4,
                        nlambda = 50, lam_ratio = 1e-4,
                        n_start = 5, seed_base = 1,
@@ -855,9 +943,10 @@ fit_by_bic <- function(y, X, method, m_set = 2:4,
   best_all
 }
 
-# -------------------------
-# Metrics & Summaries
-# -------------------------
+# ============================================================
+# Matching / Metrics (label switching 처리)
+# ============================================================
+# perms: permutation 생성(작은 m에서만 사용)
 perms <- function(v) {
   if (length(v) == 1) return(list(v))
   out <- list()
@@ -869,6 +958,9 @@ perms <- function(v) {
   out
 }
 
+# match_to_true:
+# - 추정 component와 true component를 SSE 최소가 되도록 permutation/부분집합 매칭
+# - m_hat != m_true도 처리
 match_to_true <- function(B_hat, pi_hat, s2_hat, B_true, pi_true, s2_true) {
   p <- nrow(B_true); m_true <- ncol(B_true); m_hat <- ncol(B_hat)
   best_sse <- Inf; best <- NULL
@@ -910,6 +1002,12 @@ match_to_true <- function(B_hat, pi_hat, s2_hat, B_true, pi_true, s2_true) {
   best
 }
 
+# compute_metrics:
+# - b_hat = beta_tilde / rho 로 원모형 계수로 환산
+# - MSE(b), MSE(pi), MSE(sigma^2)
+# - 변수선택 지표:
+#   * FPR/TPR: relevant set(1:10)
+#   * FHR: common set(1:7)이 hetero로 잘못 선택된 비율
 compute_metrics <- function(fit, truth, tol_sel = 1e-4) {
   if (is.null(fit)) return(list(mse_b = NA, FPR = NA, TPR = NA, FHR = NA, m_hat = NA,
                                 mse_pi = NA, mse_sigma2 = NA))
@@ -932,6 +1030,9 @@ compute_metrics <- function(fit, truth, tol_sel = 1e-4) {
   
   sel_R <- which(apply(abs(B_hat), 1, function(v) any(v > tol_sel)))
   
+  # hetero selection:
+  # - HP면 Bfull 기준(직접 hetero 파라미터)
+  # - 비-HP면 component별 편차(beta_tilde - rowmean) 기준
   if (!is.null(fit$method) && fit$method %in% c("Mix-HP-L", "Mix-HP-AL")) {
     Bfull <- fit$Bfull
     if (is.null(Bfull)) sel_H <- integer(0)
@@ -950,10 +1051,14 @@ compute_metrics <- function(fit, truth, tol_sel = 1e-4) {
        FPR = FPR, TPR = TPR, FHR = FHR, m_hat = matched$m_hat)
 }
 
-# -------------------------
-# Run Simulation Loop (TRACE ADDED)
-# - LIGHT MODE 반영: R, nlambda, max_em을 인자로 받아 fit_by_bic로 전달
-# -------------------------
+# ============================================================
+# Simulation driver (전체 루프 + TRACE)
+# ============================================================
+# run_sim_corrected:
+# - rep마다 데이터 생성
+# - method마다 fit_by_bic로 (m,lambda) 선택 및 적합
+# - compute_metrics로 성능 기록
+# - TRACE는 "어디서 오래 걸리는지" "수렴/붕괴가 있는지"를 미팅에서 바로 확인하기 위함
 run_sim_corrected <- function(R = 20, n = 200, p = 60, snr = 50,
                               nlambda = 50,
                               max_em = 200, tol_em = 1e-5,
@@ -1001,7 +1106,7 @@ run_sim_corrected <- function(R = 20, n = 200, p = 60, snr = 50,
         next
       }
       
-      # ensure method tag exists for compute_metrics
+      # method tag(hetero selection 분기용)
       fit$method <- meth
       
       met <- compute_metrics(fit, dat)
@@ -1036,9 +1141,9 @@ run_sim_corrected <- function(R = 20, n = 200, p = 60, snr = 50,
   out
 }
 
-# -------------------------
+# ============================================================
 # Execution (LIGHT MODE)
-# -------------------------
+# ============================================================
 set.seed(999)
 
 res <- run_sim_corrected(
@@ -1061,7 +1166,9 @@ res <- run_sim_corrected(
   em_trace_every = 10
 )
 
-# Summary
+# ============================================================
+# Summary table (method별 평균 성능 요약)
+# ============================================================
 library(dplyr)
 summary_table <- res %>%
   group_by(method) %>%
@@ -1078,13 +1185,16 @@ summary_table <- res %>%
   )
 print(summary_table)
 
+# ============================================================
+# Plot helper (ggplot2 있으면 ggplot, 없으면 base R)
+# ============================================================
 plot_sim_results <- function(res, save_dir = NULL, prefix = "sim") {
   if (!is.data.frame(res) || nrow(res) == 0) {
     cat("plot_sim_results: empty res\n")
     return(invisible(NULL))
   }
   
-  # ----- Base R fallback -----
+  # base plot fallback
   plot_base <- function() {
     op <- par(no.readonly = TRUE)
     on.exit(par(op), add = TRUE)
@@ -1108,7 +1218,7 @@ plot_sim_results <- function(res, save_dir = NULL, prefix = "sim") {
   library(dplyr)
   library(tidyr)
   
-  # 1) Metrics boxplots (long format)
+  # metrics boxplots (long)
   res_long <- res %>%
     select(rep, method, mse_b, mse_s2, mse_pi, FPR, TPR, FHR, chosen_m, bic, ll, em_iter) %>%
     pivot_longer(cols = c(mse_b, mse_s2, mse_pi, FPR, TPR, FHR),
@@ -1121,14 +1231,14 @@ plot_sim_results <- function(res, save_dir = NULL, prefix = "sim") {
     theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
     labs(title = "Simulation metrics by method", x = NULL, y = NULL)
   
-  # 2) chosen m distribution
+  # chosen m distribution
   p2 <- ggplot(res, aes(x = factor(chosen_m))) +
     geom_bar() +
     facet_wrap(~ method, ncol = 2) +
     theme_bw() +
     labs(title = "Chosen m distribution (by method)", x = "chosen m", y = "count")
   
-  # 3) BIC and LL by method
+  # BIC / LL
   p3 <- ggplot(res, aes(x = method, y = bic)) +
     geom_boxplot() +
     theme_bw() +
@@ -1143,7 +1253,6 @@ plot_sim_results <- function(res, save_dir = NULL, prefix = "sim") {
   
   print(p1); print(p2); print(p3); print(p4)
   
-  # Optional save
   if (!is.null(save_dir)) {
     if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
     ggsave(file.path(save_dir, paste0(prefix, "_metrics_box.png")), p1, width = 12, height = 7)
@@ -1154,3 +1263,6 @@ plot_sim_results <- function(res, save_dir = NULL, prefix = "sim") {
   
   invisible(list(p_metrics = p1, p_m = p2, p_bic = p3, p_ll = p4))
 }
+
+# 시각화
+plot_sim_results(res)
